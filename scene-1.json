@@ -22,7 +22,7 @@
             "color": [255,0,0],
             "specularExponent": 500,
             "specularK": 0.001,
-            "ambientK": 0.001,
+            "ambientK": 0.2,
             "diffuseK": 0.001,
             "reflectiveK": 0.25,
             "type": "sphere"

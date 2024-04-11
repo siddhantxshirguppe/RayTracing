@@ -1,10 +1,11 @@
 var scene = null;
 var maxDepth = 5;
+var slider_depth = 0;
 var background_color = [190/255, 210/255, 215/255];
-var ambientToggle = true;
-var diffuseToggle = true;
-var specularToggle = true;
-var reflectionToggle = true;
+var ambientToggle = false;
+var diffuseToggle = false;
+var specularToggle = false;
+var reflectionToggle =false;
 var bias = 0.001;
 
 class Ray {
@@ -92,13 +93,11 @@ function intersectObjects(ray, depth) {
     if(depth === 0)
     {
         var closestHit = null;
-        // Iterate over all objects in the scene
         for (var i = 0; i < scene.objects.length; i++) {
             var object = scene.objects[i];
             //console.log("sidobj iterating through obj:"+object.type);
             var intersection;
     
-            // Compute intersection based on object type
             if (object.type === "sphere") {
                 intersection = raySphereIntersection(ray, object);
             }else if(object.type === "plane") {
@@ -127,13 +126,13 @@ function intersectObjects(ray, depth) {
         var obj_normal;
         if(hit_point.object.type === "plane")
         {
-            obj_normal = hit.point.object.normal;
+            obj_normal = hit_point.object.normal;
         }else if(hit_point.object.type === "sphere")
         {
             obj_normal = sphereNormal(hit_point.object, hit_point.intersection.point);
         }
         //get the reflected ray direction 
-        var reflected_ray = normalize(sub(ray.direction ,mult(obj_normal,2*dot(ray.direction,obj_normal))));
+        var reflected_ray_dir = normalize(sub(ray.direction ,mult(obj_normal,2*dot(ray.direction,obj_normal))));
 
 
         var intersect_pos_nudged = add(hit_point.intersection.point,mult(reflected_ray_dir,bias));
@@ -142,7 +141,7 @@ function intersectObjects(ray, depth) {
         var hit = intersectObjects(reflected_ray, depth-1);
         if(hit != null)
         {
-            return hit.object.color;
+            return hit;
     
         }else
         {
@@ -183,13 +182,10 @@ function shade(ray, hit, depth) {
         //get the sphere normal at the point 
         var total_diffuse_intensity = 0;
         var total_specular_intensity = 0;
-        var specular_factor = 64;
         var sphere_normal = sphereNormal(hit.object, hit.intersection.point);
 
         for (var i = 0; i < scene.lights.length; i++) 
         {
-            //diffuse calculation
-            //get the direction from intersection point to the light source 
             var light = scene.lights[i].position;
             //console.log("sidlight:"+light);
             var intersection_light_dir =  normalize(sub(light, hit.intersection.point));
@@ -213,14 +209,14 @@ function shade(ray, hit, depth) {
                 specular_pdt = 0;
             }
 
-            specular_pdt = Math.pow(specular_pdt, specular_factor);
+            //specular_pdt = Math.pow(specular_pdt, specular_factor);
+            specular_pdt =  Math.pow(specular_pdt, object.specularExponent);
             total_specular_intensity += specular_pdt; 
 
         }
 
-        var ambient_coefficient = 0.2;
-        var final_diffuse_color = mult(object.color, total_diffuse_intensity);
-        var final_ambient_color = mult(object.color, ambient_coefficient);
+        var final_ambient_color = mult(object.color, object.ambientK);
+        var final_diffuse_color = mult(object.color, total_diffuse_intensity*object.diffuseK);
         var final_specular_color = mult([255,255,255], total_specular_intensity);
         
 
@@ -237,16 +233,19 @@ function shade(ray, hit, depth) {
             }
         }
         
-        
-        color =  add ( final_specular_color, add(final_diffuse_color, final_ambient_color) );
-        //check for reflected rays 
-        var reflected_ray = normalize(sub(ray.direction ,mult(sphere_normal,2*dot(ray.direction,sphere_normal))));
-        var reflected_color = get_reflected_color(reflected_ray,hit.intersection.point,0);
-        if(reflected_color != null)
-        {   
-            var reflected_coefficient = 0.2;
-            var final_reflected_color = mult(reflected_color, reflected_coefficient);
-            color = add ( color,final_reflected_color);
+       
+        if(ambientToggle)
+        {
+            color = final_ambient_color;
+        }
+        if(diffuseToggle)
+        {
+            color = add(color,final_diffuse_color);
+        }
+        if(specularToggle)
+        {
+            //console.log("sidtest specular!!");
+            color = add(color,final_specular_color);
         }
 
 
@@ -254,7 +253,6 @@ function shade(ray, hit, depth) {
     {
         var total_diffuse_intensity = 0;
         var total_specular_intensity = 0;
-        var specular_factor = 64;
         var plane_normal = hit.object.normal;
 
         for (var i = 0; i < scene.lights.length; i++) 
@@ -290,18 +288,18 @@ function shade(ray, hit, depth) {
         }
         
 
-
-        color =  add ( final_specular_color, add(final_diffuse_color, final_ambient_color) );
-
-        //check for reflected rays 
-        var reflected_ray = normalize(sub(ray.direction ,mult(plane_normal,2*dot(ray.direction,plane_normal))));
-        var reflected_color = get_reflected_color(reflected_ray,hit.intersection.point,0);
-
-        if(reflected_color != null)
+        
+        if(ambientToggle)
         {
-            var reflected_coefficient = 0.2;
-            var final_reflected_color = mult(reflected_color, reflected_coefficient);
-            color = add ( color,final_reflected_color);
+            color = final_ambient_color;
+        }
+        if(diffuseToggle)
+        {
+            color = add(color,final_diffuse_color);
+        }
+        if(specularToggle)
+        {
+            color = add(color,final_specular_color);
         }
         
     }
@@ -311,30 +309,6 @@ function shade(ray, hit, depth) {
 
 
     return color;
-    
-    /*
-    for (var i = 0; i < scene.lights.length; i++) 
-    {
-        var light = scene.lights[i];
-        console.log("sidlight:"+light);
-    }
-    //return object.color;
-    return color;
-    // Compute object normal, based on object type
-    // If sphere, use sphereNormal, if not then it's a plane, use object normal
-    var normal;
-
-    // Loop through all lights, computing diffuse and specular components *if not in shadow*
-    var diffuse = 0;
-    var specular = 0;
-
-
-    // Combine colors, taking into account object constants
-
-    // Handle reflection, make sure to call trace incrementing depth
-
-    //return color;
-    */
 }
 
 
@@ -343,13 +317,25 @@ function shade(ray, hit, depth) {
 */
 function trace(ray, depth) {
     if(depth > maxDepth) return background_color;
-    var hit = intersectObjects(ray, depth);
-    if(hit != null) {
-        var color = shade(ray, hit, depth);
 
-        return color;
+    var final_color = null;
+    // Loop through each depth level
+    for (var currentDepth = 0; currentDepth <= depth; currentDepth++) {
+
+        var hit = intersectObjects(ray, currentDepth);
+        if (hit != null) {
+            var color = shade(ray, hit, currentDepth);
+            if(final_color)
+            {
+                color = mult(color, hit.object.reflectiveK);
+                final_color = add (final_color,color);
+            }else{
+                final_color = color;
+            }
+        }
     }
-    return null;
+
+    return final_color;;
 }
 
 function get_reflected_color(reflected_ray_dir,intersection_pos,depth)
@@ -405,7 +391,6 @@ function isInShadow(hit, light) {
 /*
     Render loop
 */
-/*
 function render(element) {
     if(scene == null)
         return;
@@ -430,51 +415,19 @@ function render(element) {
     var pixelWidth = (halfWidth * 2) / (scene.camera.width - 1);
     var pixelHeight = (halfHeight * 2) / (scene.camera.height - 1);
 
-    for(var x=0; x < width; x++) {
-        for(var y=0; y < height; y++) {
-            var vx = mult(right, x*pixelWidth - halfWidth);
-            var vy = mult(up, y*pixelHeight - halfHeight);
-            var direction = normalize(add(add(eye,vx),vy));
-            var origin = scene.camera.position;
+    if(ambientToggle)
+    {
+        console.log("sidtest ambient!!");
 
-            var ray = new Ray(origin, direction);
-            var color = trace(ray, 0);
-            if(color != null) {
-                var index = x * 4 + y * width * 4;
-                data.data[index + 0] = color[0];
-                data.data[index + 1] = color[1];
-                data.data[index + 2] = color[2];
-                data.data[index + 3] = 255;
-            }
-        }
     }
-    console.log("done");
-    ctx.putImageData(data, 0, 0);
-}
-*/
-function render(element) {
-    if(scene == null)
-        return;
-    
-    var width = element.clientWidth;
-    var height = element.clientHeight;
-    element.width = width;
-    element.height = height;
-    scene.camera.width = width;
-    scene.camera.height = height;
-
-    var ctx = element.getContext("2d");
-    var data = ctx.getImageData(0, 0, width, height);
-
-    var eye = normalize(sub(scene.camera.direction,scene.camera.position));
-    var right = normalize(cross(eye, [0,1,0]));
-    var up = normalize(cross(right, eye));
-    var fov = ((scene.camera.fov / 2.0) * Math.PI / 180.0);
-
-    var halfWidth = Math.tan(fov);
-    var halfHeight = (scene.camera.height / scene.camera.width) * halfWidth;
-    var pixelWidth = (halfWidth * 2) / (scene.camera.width - 1);
-    var pixelHeight = (halfHeight * 2) / (scene.camera.height - 1);
+    if(diffuseToggle)
+    {
+         console.log("sidtest diffuse!!");
+    }
+    if(specularToggle)
+    {
+        console.log("sidtest diffuse!!");
+    }
 
     for(var x=0; x < width; x++) {
         for(var y=0; y < height; y++) {
@@ -489,7 +442,17 @@ function render(element) {
             var origin = scene.camera.position;
 
             var ray = new Ray(origin, direction);
-            var color = trace(ray, 0);
+            
+            if(reflectionToggle)
+            {
+                if(slider_depth ===0)
+                {
+                    slider_depth = 1;
+                }
+            }else{
+                slider_depth = 0;
+            }
+            var color = trace(ray, slider_depth);
             //var color = [255,0,0,255];
             if(color != null) {
                 var index = x * 4 + y * width * 4;
@@ -517,7 +480,7 @@ window.handleFile = function(e) {
 }
 
 window.updateMaxDepth = function() {
-    maxDepth = document.querySelector("#maxDepth").value;
+    slider_depth = document.querySelector("#maxDepth").value;
     var element = document.querySelector("#canvas");
     render(element);
 }
